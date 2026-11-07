@@ -4,6 +4,10 @@ User feedback: lacks optimisation; district borders pixelated; houses in water; 
 like real roads; airport poorly made; building models bad. Use free online 3D models.
 
 ## Done so far
+- Steps 1-6 done and pushed: Kenney models with LOD, water-safe lots with road clearance, smooth rivers
+  and district borders, realistic roads (medians, curbs, junction polygons), new airport, Kenney cars.
+- LEFT: step 7 (shadow autoUpdate only on change, incremental building regeneration), check car model
+  front direction and model building facing, a few more screenshot checks.
 - Downloaded Kenney CC0 kits (commercial, suburban, industrial, cars) into `assets/models/*` (GLB +
   `Textures/colormap.png`, License.txt per kit).
 - Vendored `vendor/jsm/loaders/GLTFLoader.js` + `vendor/jsm/utils/BufferGeometryUtils.js` (three r160),

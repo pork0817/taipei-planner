@@ -10,6 +10,7 @@ import { isWaterAt } from './water.js';
 
 export const ROAD_LIFT = 0.0007;    // road surface above ground (km)
 export const EXPWY_H = 0.014;       // elevated expressway deck height
+export const CURB = 0.00015;         // raised sidewalk / median height (15 cm)
 const PXM = 8;                       // texture pixels per metre
 const REPEAT_M = 8;                  // texture repeats every 8 m along the road
 
@@ -18,10 +19,10 @@ const ASPHALT = { NL: '#4b4b4e', JP: '#44474c', UK: '#46484c', US: '#525458' };
 // ---------------------------------------------------------------- textures
 const texCache = new Map();
 function roadKey(type, c) {
-  return [type, c.lanes, c.oneWay ? 1 : 0, c.sidewalk, c.arcade ? 1 : 0, c.trees ? 1 : 0, c.bikeLane, c.busLane ? 1 : 0, c.style].join('|');
+  return [type, c.lanes, c.oneWay ? 1 : 0, c.sidewalk, c.arcade ? 1 : 0, c.trees ? 1 : 0, c.bikeLane, c.busLane ? 1 : 0, c.style, c.median || 0].join('|');
 }
 
-function layout(type, c) {
+export function layout(type, c) {
   // cross-section from left to right as [kind, metres]
   const T = ROAD_TYPES[type];
   const side = [];
@@ -43,7 +44,7 @@ function layout(type, c) {
     if (c.sidewalk > 0) p.push(['walk', c.sidewalk]);
     return p;
   }
-  return [...half(false), ['center', 0], ...half(true)];
+  return [...half(false), (c.median || 0) > 0 ? ['median', c.median] : ['center', 0], ...half(true)];
 }
 
 export function roadTexture(type, c) {
@@ -77,12 +78,25 @@ export function roadTexture(type, c) {
     } else if (kind === 'lane' || kind === 'bus') {
       x.fillStyle = kind === 'bus' ? '#8b3a2f' : asphalt; x.fillRect(x0, 0, w, H);
       laneEdges.push([x0, x0 + w, kind]);
+    } else if (kind === 'median') {
+      const planted = type === 'boulevard' || type === 'avenue';
+      x.fillStyle = planted ? '#6f9a4f' : '#b2afa6'; x.fillRect(x0, 0, w, H);
+      if (planted) { x.fillStyle = 'rgba(40,70,30,0.35)'; for (let y = 0; y < H; y += 6) x.fillRect(x0 + ((y * 7) % Math.max(1, w - 3)), y, 3, 3); }
+      x.fillStyle = '#a8a49a'; x.fillRect(x0, 0, 2, H); x.fillRect(x0 + w - 2, 0, 2, H);
     } else if (kind === 'plaza') {
       x.fillStyle = '#d8c2a4'; x.fillRect(0, 0, W, H);
       x.strokeStyle = 'rgba(120,90,60,0.25)';
       for (let y = 0; y < H; y += 10) for (let xx = (y / 10) % 2 * 10; xx < W; xx += 20) x.strokeRect(xx + 0.5, y + 0.5, 20, 10);
     }
     pos += m;
+  }
+  // asphalt grain
+  for (const [a0, a1] of laneEdges) {
+    for (let q = 0; q < (a1 - a0) * H * 0.08; q++) {
+      const gx = a0 + Math.random() * (a1 - a0), gy = Math.random() * H, v = Math.random();
+      x.fillStyle = v < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.06)';
+      x.fillRect(gx, gy, 1, 1);
+    }
   }
   // lane markings
   for (let q = 1; q < laneEdges.length; q++) {
@@ -91,7 +105,7 @@ export function roadTexture(type, c) {
     x.fillStyle = 'rgba(240,240,240,0.9)';
     for (let y = 0; y < H; y += 64) x.fillRect(xe - 1, y, 2, 24);
   }
-  if (!c.oneWay && type !== 'pedestrian') {
+  if (!c.oneWay && type !== 'pedestrian' && !((c.median || 0) > 0)) {
     // centre line between the two directions
     let cx = 0, acc = 0;
     for (const [kind, m] of parts) { if (kind === 'center') { cx = acc * sx; break; } acc += m; }
@@ -176,6 +190,19 @@ export class Roads3D {
       deg.set(e.a, (deg.get(e.a) || 0) + 1); deg.set(e.b, (deg.get(e.b) || 0) + 1);
     }
     this.vertEdge = new Map();
+    // junction trim radius: roads stop at the edge of the junction area
+    const carriage = rd => (rd.cfg.lanes * (rd.cfg.oneWay ? 1 : 2) * ROAD_TYPES[rd.type].laneW + BIKE_LANES[rd.cfg.bikeLane].w * (rd.cfg.oneWay ? 1 : 2) + (rd.cfg.oneWay ? 0 : (rd.cfg.median || 0))) / 2000;
+    for (const [nid, d] of deg) {
+      if (d < 3) continue;
+      let r = 0;
+      for (const id of net.nodes[nid].e) {
+        const rd = net.roads[net.edges[id].road];
+        if (!ROAD_TYPES[rd.type].surface || rd.type === 'pedestrian') continue;
+        r = Math.max(r, carriage(rd) + 0.0015);
+      }
+      if (r) jr.set(nid, r);
+    }
+    const curb = { pos: [], side: [], uv: [], col: [], idx: [] };
     for (const e of Object.values(net.edges)) {
       const r = net.roads[e.road], T = ROAD_TYPES[r.type], c = r.cfg;
       const A = net.nodes[e.a], B = net.nodes[e.b];
@@ -206,28 +233,67 @@ export class Roads3D {
         ys[s] = h;
       }
       this.edgeY.set(e.id, { ys, n });
-      const base = b.pos.length / 3;
-      for (let s = 0; s <= n; s++) {
-        const t = s / n, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t;
-        const v = t * len * 1000 / REPEAT_M;
-        for (const sgn of [-1, 1]) {
-          b.pos.push(x, ys[s], y);
-          b.side.push(sx * hw * sgn, 0, sy * hw * sgn);
-          b.uv.push(sgn < 0 ? 0 : 1, v);
-          b.col.push(1, 1, 1);
-        }
-        if (s < n) { const q = base + s * 2; b.idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
-        // pillars under elevated sections
-        if (!T.surface && ys[s] - Math.max(T3.heightAt(x, y), 0) > 0.004 && s % 2 === 0) pillars.push([x, y, Math.max(T3.heightAt(x, y), WATERFLOOR), ys[s]]);
+      // trimmed extent along the edge (junctions draw the middle part)
+      const t0 = jr.has(e.a) && T.surface ? Math.min(0.45, jr.get(e.a) / len) : 0;
+      const t1 = jr.has(e.b) && T.surface ? Math.max(0.55, 1 - jr.get(e.b) / len) : 1;
+      const yAt = t => { const f = t * n, i = Math.min(n - 1, Math.floor(f)); return ys[i] + (ys[i + 1] - ys[i]) * (f - i); };
+      const m = Math.max(1, Math.ceil((t1 - t0) * len / 0.04));
+      // cross-section strips: raised (sidewalk, median) or at road level
+      const parts = layout(r.type, c), tot = parts.reduce((q, p) => q + p[1], 0) || 1;
+      const strips = [];
+      let acc = 0;
+      for (const [kind, wm] of parts) {
+        if (wm <= 0) continue;
+        const raised = kind === 'walk' || kind === 'median';
+        const o0 = acc / tot, o1 = (acc + wm) / tot;
+        const last = strips[strips.length - 1];
+        if (last && last.raised === raised) last.o1 = o1; else strips.push({ raised, o0, o1, kind });
+        acc += wm;
       }
-      b.edges.push([e.id, base, (n + 1) * 2]);
+      const base = b.pos.length / 3;
+      for (const st of strips) {
+        const sb = b.pos.length / 3;
+        for (let q = 0; q <= m; q++) {
+          const t = t0 + (t1 - t0) * q / m, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t;
+          const h = yAt(t) + (st.raised && T.surface ? CURB : 0), v = t * len * 1000 / REPEAT_M;
+          for (const o of [st.o0, st.o1]) {
+            const off = (o * 2 - 1) * hw;
+            b.pos.push(x, h, y); b.side.push(sx * off, 0, sy * off); b.uv.push(o, v); b.col.push(1, 1, 1);
+          }
+          if (q < m) { const v0 = sb + q * 2; b.idx.push(v0, v0 + 1, v0 + 2, v0 + 1, v0 + 3, v0 + 2); }
+        }
+      }
+      // curb faces where raised strips meet the carriageway
+      if (T.surface) for (let i = 0; i < strips.length - 1; i++) {
+        if (strips[i].raised === strips[i + 1].raised) continue;
+        const o = strips[i].o1, off = (o * 2 - 1) * hw, cb = curb.pos.length / 3;
+        for (let q = 0; q <= m; q++) {
+          const t = t0 + (t1 - t0) * q / m, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t, h = yAt(t);
+          curb.pos.push(x, h, y, x, h + CURB, y); curb.side.push(sx * off, 0, sy * off, sx * off, 0, sy * off);
+          curb.uv.push(0, 0, 0, 1); curb.col.push(1, 1, 1, 1, 1, 1);
+          if (q < m) { const v0 = cb + q * 2; curb.idx.push(v0, v0 + 1, v0 + 2, v0 + 1, v0 + 3, v0 + 2); }
+        }
+      }
+      for (let q = 0; q <= n; q += 2) {
+        const t = q / n, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t;
+        if (!T.surface && ys[q] - Math.max(T3.heightAt(x, y), 0) > 0.004) pillars.push([x, y, Math.max(T3.heightAt(x, y), WATERFLOOR), ys[q]]);
+      }
+      b.edges.push([e.id, base, b.pos.length / 3 - base]);
+      // trees along planted medians
+      if ((c.median || 0) >= 3 && !c.oneWay && (r.type === 'boulevard' || r.type === 'avenue')) {
+        for (let d = 0.01; d < len - 0.006; d += 0.012) {
+          const t = d / len;
+          if (t < t0 || t > t1) continue;
+          this.trees.push([A.x + dx * d, A.y + dy * d, yAt(t) - ROAD_LIFT + CURB]);
+        }
+      }
       // deck sides for elevated / bridge sections (concrete strip below the edge)
       if (!T.surface || water.some(w => w)) {
         for (const sgn of [-1, 1]) {
           const cb = concrete.pos.length / 3;
           for (let s = 0; s <= n; s++) {
             const t = s / n, x = A.x + (B.x - A.x) * t + sx * hw * sgn, y = A.y + (B.y - A.y) * t + sy * hw * sgn;
-            concrete.pos.push(x, ys[s], y, x, ys[s] - 0.0016, y);
+            concrete.pos.push(x, ys[s] + (T.surface ? 0.0004 : 0.0009), y, x, ys[s] - 0.0016, y);
             concrete.nrm.push(sx * sgn, 0, sy * sgn, sx * sgn, 0, sy * sgn);
             if (s < n) { const q = cb + s * 2; concrete.idx.push(q, q + 1, q + 2, q + 2, q + 1, q + 3); }
           }
@@ -249,31 +315,45 @@ export class Roads3D {
         for (let d = 0.008; d < len - 0.004; d += 0.014) {
           for (const sgn of [-1, 1]) {
             const x = A.x + dx * d + sx * off * sgn, y = A.y + dy * d + sy * off * sgn;
-            this.trees.push([x, y, ys[Math.round(d / len * n)] - ROAD_LIFT]);
+            this.trees.push([x, y, ys[Math.round(d / len * n)] - ROAD_LIFT + CURB]);
           }
         }
       }
     }
-    // junction patches (hide overlapping ribbons and markings at intersections)
-    const jb = { pos: [], side: [], uv: [], col: [], idx: [] };
-    for (const [nid, d] of deg) {
-      if (d < 3) continue;
+    // junction areas: paved corners (full width) with an asphalt core, as convex hulls
+    const jb = { pos: [], side: [], uv: [], col: [], idx: [] }, jp = { pos: [], side: [], uv: [], col: [], idx: [] };
+    const hull = pts => {
+      pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const lo = [], up = [];
+      for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+      for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+      return lo.slice(0, -1).concat(up.slice(0, -1));
+    };
+    const fan = (B2, node, y, P) => {
+      if (P.length < 3) return;
+      const base = B2.pos.length / 3;
+      B2.pos.push(node.x, y, node.y); B2.side.push(0, 0, 0); B2.uv.push(0, 0); B2.col.push(1, 1, 1);
+      for (const [ox, oy] of P) { B2.pos.push(node.x, y, node.y); B2.side.push(ox, 0, oy); B2.uv.push(0, 0); B2.col.push(1, 1, 1); }
+      for (let i = 0; i < P.length; i++) B2.idx.push(base, base + 1 + ((i + 1) % P.length), base + 1 + i);
+    };
+    for (const [nid, r] of jr) {
       const node = net.nodes[nid];
-      let r = 0;
+      const full = [], core = [];
       for (const id of node.e) {
-        const e = net.edges[id]; const rd = net.roads[e.road];
-        if (!ROAD_TYPES[rd.type].surface || rd.type === 'pedestrian') continue;
-        r = Math.max(r, (rd.cfg.lanes * (rd.cfg.oneWay ? 1 : 2) * ROAD_TYPES[rd.type].laneW + BIKE_LANES[rd.cfg.bikeLane].w * 2) / 2000);
+        const e = net.edges[id], rd = net.roads[e.road];
+        if (!ROAD_TYPES[rd.type].surface) continue;
+        const o = net.nodes[e.a === nid ? e.b : e.a], L = e.len || 1e-6;
+        const ux = (o.x - node.x) / L, uy = (o.y - node.y) / L, px = -uy, py = ux;
+        const fw = roadWidthM(rd.type, rd.cfg) / 2000, cw = rd.type === 'pedestrian' ? fw : carriage(rd);
+        for (const sg of [-1, 1]) {
+          full.push([ux * r + px * fw * sg, uy * r + py * fw * sg]);
+          core.push([ux * r + px * cw * sg, uy * r + py * cw * sg]);
+        }
       }
-      if (!r) continue;
-      jr.set(nid, r);
-      const y = this.nodeY.get(nid) + 0.00005, base = jb.pos.length / 3, S = 14;
-      jb.pos.push(node.x, y, node.y); jb.side.push(0, 0, 0); jb.uv.push(0.5, 0.5); jb.col.push(1, 1, 1);
-      for (let q = 0; q <= S; q++) {
-        const a = q / S * Math.PI * 2;
-        jb.pos.push(node.x, y, node.y); jb.side.push(Math.cos(a) * r, 0, Math.sin(a) * r); jb.uv.push(0.5, 0.5); jb.col.push(1, 1, 1);
-        if (q < S) jb.idx.push(base, base + 2 + q, base + 1 + q);
-      }
+      const y = this.nodeY.get(nid);
+      fan(jp, node, y + 0.00002, hull(full));
+      fan(jb, node, y + 0.00006, hull(core));
     }
     const mk = (b, mat) => {
       const geo = new THREE.BufferGeometry();
@@ -296,11 +376,16 @@ export class Roads3D {
       const mat = ribbonMaterial({ map: b.tex, vertexColors: true }, this.shared);
       mk(b, mat);
     }
+    if (jp.idx.length) {
+      const m = mk(jp, ribbonMaterial({ color: 0xc9c4b8, vertexColors: true }, this.shared));
+      m.material.polygonOffsetFactor = -3; m.material.polygonOffsetUnits = -3;
+    }
     if (jb.idx.length) {
-      const m = mk(jb, ribbonMaterial({ color: 0x505257, vertexColors: true }, this.shared));
+      const m = mk(jb, ribbonMaterial({ color: 0x46484c, vertexColors: true }, this.shared));
       m.material.polygonOffsetFactor = -4; m.material.polygonOffsetUnits = -4;
       m.renderOrder = 1;
     }
+    if (curb.idx.length) mk(curb, ribbonMaterial({ color: 0xa9a59b, vertexColors: true }, this.shared));
     if (concrete.idx.length) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(concrete.pos, 3));
@@ -320,7 +405,7 @@ export class Roads3D {
         const other = net.nodes[e.a === nid ? e.b : e.a];
         const ux = (other.x - node.x) / e.len, uy = (other.y - node.y) / e.len;
         const across = (rd.cfg.lanes * (rd.cfg.oneWay ? 1 : 2) * T.laneW) / 2000;
-        const dist = r + 0.0025;
+        const dist = r + 0.0017;
         const cx = node.x + ux * dist, cy = node.y + uy * dist;
         const h = (this.nodeY.get(nid) || 0) + 0.0001;
         const px = -uy, py = ux, dep = 0.0015;

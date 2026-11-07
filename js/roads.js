@@ -29,6 +29,8 @@ export function defaultCfg(type, style = 'JP') {
     lanes: t.lanes, oneWay: false, sidewalk: t.sidewalk, arcade: false, trees: type === 'boulevard',
     busLane: false, bikeLane: 'none', signal: { on: t.signal, cycle: t.cycle || 90, green: t.green || 0.5 },
     speed: t.speed, style,
+    // central reservation (m): planted on boulevards, a barrier on highways/expressways
+    median: { street: 0, avenue: 0, boulevard: 6, highway: 2, expressway: 1.2, pedestrian: 0 }[type],
   };
   if (type !== 'expressway' && type !== 'pedestrian') {
     if (style === 'NL') { c.bikeLane = type === 'street' ? 'painted' : 'protected'; c.speed = Math.min(c.speed, type === 'street' ? 30 : 50); c.trees = true; }
@@ -45,7 +47,7 @@ export function defaultCfg(type, style = 'JP') {
 export function roadWidthM(type, c) {
   const t = ROAD_TYPES[type];
   const dirs = c.oneWay ? 1 : 2;
-  return c.lanes * dirs * t.laneW + c.sidewalk * 2 + BIKE_LANES[c.bikeLane].w * dirs + (type === 'pedestrian' ? 4 : 0);
+  return c.lanes * dirs * t.laneW + c.sidewalk * 2 + BIKE_LANES[c.bikeLane].w * dirs + (type === 'pedestrian' ? 4 : 0) + (c.oneWay ? 0 : (c.median || 0));
 }
 
 export function costPerKm(type, c) {

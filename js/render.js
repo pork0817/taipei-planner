@@ -115,7 +115,7 @@ export class Renderer {
     if (this.groundMode) {
       // 3D ground texture: buildings are real meshes, so only paint the ground
       if (s === S.PARK) return hash(k) < 0.5 ? '#7fb36a' : '#78ad63';
-      if (s === S.AIRPORT) return '#9fa5a8';
+      if (s === S.AIRPORT) return '#8ea86e';
       if (s) return '#d9d4ca';
       if (z) {
         if (!l) return ZONES[z].ground;                 // zoned but empty: show the zone colour

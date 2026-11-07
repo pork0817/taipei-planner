@@ -76,6 +76,21 @@ export class Vehicles3D extends Vehicles {
     this.near = []; this.nearT = 0;
   }
 
+  /** Use the Kenney car models (one instanced mesh per model) instead of boxes. */
+  setLibrary(lib) {
+    const cars = lib.list('cars').filter(m => !['garbage-truck'].includes(m.name));
+    // taxis are common in Taipei: weight them up
+    const weighted = cars.flatMap(m => m.name === 'taxi' ? [m, m, m] : m.name === 'sedan' || m.name === 'suv' ? [m, m] : [m]);
+    this.carModels = weighted.map(m => m);
+    this.carMeshes = new Map();
+    for (const m of cars) {
+      const mesh = new THREE.InstancedMesh(m.geo, m.mat, 500);
+      mesh.count = 0; mesh.frustumCulled = false; mesh.castShadow = true;
+      this.scene.add(mesh);
+      this.carMeshes.set(m.key, { mesh, m, n: 0 });
+    }
+  }
+
   rebuild() {
     super.rebuild();
     this.target = Math.round(Math.min(MAX_CARS, Math.max(60, 120 + 900 * ((G.stats?.modal.car || 0) + (G.stats?.modal.scooter || 0)))));
@@ -137,6 +152,8 @@ export class Vehicles3D extends Vehicles {
     const M = this._m, Q = this._q, V = this._v, Sc = this._s, C = this._c;
     const up = new THREE.Vector3(0, 1, 0);
     let n = 0;
+    if (this.carMeshes) for (const cm of this.carMeshes.values()) cm.n = 0;
+    const showCars = R.dist < 3.5;
     for (let i = 0; i < this.cars.length; i++) {
       let c = this.cars[i];
       if (!net.edges[c.e.id]) { c = this.cars[i] = this.spawn() || c; if (!net.edges[c.e.id]) continue; }
@@ -156,12 +173,25 @@ export class Vehicles3D extends Vehicles {
       V.set(x - dy / L * off, h, y + dx / L * off);
       Q.setFromAxisAngle(up, Math.atan2(-dy, dx));
       if (c.scooter) Sc.set(0.0019, 0.0016, 0.0007); else Sc.set(0.0044, 0.0015, 0.0018);
+      if (!showCars) continue;
+      if (this.carMeshes && !c.scooter) {
+        c.mi ??= Math.floor(Math.random() * this.carModels.length);
+        const model = this.carModels[c.mi], cm = this.carMeshes.get(model.key);
+        if (cm && cm.n < 500) {
+          const s = 0.0046 / model.size.z;
+          Q.setFromAxisAngle(up, Math.atan2(dx, dy));
+          M.compose(V, Q, Sc.set(s, s, s));
+          cm.mesh.setMatrixAt(cm.n++, M);
+          continue;
+        }
+      }
       M.compose(V, Q, Sc);
       this.carMesh.setMatrixAt(n, M);
       this.carMesh.setColorAt(n, C.set(c.col));
       n++;
     }
     this.carMesh.count = n;
+    if (this.carMeshes) for (const cm of this.carMeshes.values()) { cm.mesh.count = cm.n; cm.mesh.instanceMatrix.needsUpdate = true; }
     this.carMesh.instanceMatrix.needsUpdate = true;
     if (this.carMesh.instanceColor) this.carMesh.instanceColor.needsUpdate = true;
 

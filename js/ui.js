@@ -232,6 +232,7 @@ function roadCfgEditor(el, type, c, onChange) {
   el.innerHTML = `
     ${car ? `<label class="row">Lanes per direction <span class="stepper"><button data-a="lanes-">−</button><b>${c.lanes}</b><button data-a="lanes+">+</button></span></label>
     <label class="row"><span>One-way</span><input type="checkbox" data-f="oneWay" ${c.oneWay ? 'checked' : ''}></label>
+    ${!c.oneWay ? `<label class="row">Median ${type === 'boulevard' || type === 'avenue' ? '(planted)' : '(barrier)'} <span><input type="range" min="0" max="12" step="0.5" data-f="median" value="${c.median || 0}"><em>${c.median || 0} m</em></span></label>` : ''}
     <label class="row">Speed limit <span><input type="range" min="20" max="${type === 'expressway' ? 120 : 90}" step="5" data-f="speed" value="${c.speed}"><em>${c.speed} km/h</em></span></label>` : ''}
     ${type !== 'expressway' ? `<label class="row">Sidewalk width <span><input type="range" min="0" max="8" step="0.5" data-f="sidewalk" value="${c.sidewalk}"><em>${c.sidewalk} m</em></span></label>
     <label class="row"><span>Arcade (騎樓) covered walkway</span><input type="checkbox" data-f="arcade" ${c.arcade ? 'checked' : ''}></label>
@@ -256,7 +257,7 @@ function roadCfgEditor(el, type, c, onChange) {
     inp.addEventListener(ev, () => {
       const v = inp.type === 'checkbox' ? inp.checked : inp.type === 'range' ? +inp.value : inp.value;
       set(v);
-      if (inp.type === 'range') { inp.nextElementSibling.textContent = f === 'signal.green' ? Math.round(v * 100) + '%' : f === 'speed' ? v + ' km/h' : f === 'sidewalk' ? v + ' m' : v + ' s'; onChange(c, f); }
+      if (inp.type === 'range') { inp.nextElementSibling.textContent = f === 'signal.green' ? Math.round(v * 100) + '%' : f === 'speed' ? v + ' km/h' : f === 'sidewalk' || f === 'median' ? v + ' m' : v + ' s'; onChange(c, f); }
       else { rerender(); onChange(c, f); }
     });
   });

@@ -11,6 +11,7 @@ import { Roads3D } from './roads.js';
 import { Buildings3D } from './buildings.js';
 import { Transit3D } from './transit.js';
 import { ModelLibrary } from './models.js';
+import { Airports3D } from './airport.js';
 import { buildRivers } from './water.js';
 import { districtLines, borderMesh } from './borders.js';
 
@@ -112,10 +113,12 @@ export class Renderer3D {
     this.transit = new Transit3D(G, this.terrain, this.shared);
     if (this.lib.ready) this.buildings.setLibrary(this.lib);
     this.rivers = buildRivers(this.time);
+    this.airports = new Airports3D(G, this.terrain, this.time);
+    this.airportSig = null;
     this.borderGroup = new THREE.Group();
     this.borderLines = districtLines(G);
     this._borderDist = 0;
-    this.layers = [this.terrain.mesh, this.terrain.ovMesh, ...this.terrain.extras, this.rivers, this.borderGroup, this.roads.group, this.buildings.group, this.transit.group];
+    this.layers = [this.terrain.mesh, this.terrain.ovMesh, ...this.terrain.extras, this.rivers, this.borderGroup, this.airports.group, this.roads.group, this.buildings.group, this.transit.group];
     for (const o of this.layers) this.scene.add(o);
     this.netKey = null; this.transitSig = null;
     this.baseDirty = true; this.ovDirty = true;
@@ -155,7 +158,7 @@ export class Renderer3D {
     sc.updateProjectionMatrix();
     this.sun.castShadow = this.dist < 8;
     // roads widen when zoomed out so the network stays readable
-    this.shared.uWScale.value = Math.max(1, 2.6 / (this.cam.scale * 0.012));
+    this.shared.uWScale.value = Math.min(3, Math.max(1, 2.2 / (this.cam.scale * 0.012)));
     const fine = this.shared.uWScale.value < 1.3;
     if (this.buildings) this.buildings.meshes.trunk.visible = this.dist < 5;
     if (this.roads) { if (this.roads.crossMesh) this.roads.crossMesh.visible = fine; for (const m of this.roads.lightMeshes || []) m.visible = this.dist < 2.5; }
@@ -257,6 +260,8 @@ export class Renderer3D {
       this.r2d.drawBase();
       this.terrain.tex.needsUpdate = true;
       this.buildings.rebuild(this.roads.trees);
+      const asig = JSON.stringify(this.airports.footprints());
+      if (asig !== this.airportSig) { this.airportSig = asig; this.airports.rebuild(); }
       this.ovDirty = true;
     }
     if (this.ovDirty) {
@@ -282,6 +287,7 @@ export class Renderer3D {
     if (nearR > 0) this.buildings.repartition(this.tx, this.ty, nearR);
     else if (this.buildings.lodU.value.z > 0) { this.buildings.lodU.value.z = -1; for (const mm of this.buildings.modelMeshes.values()) mm.count = 0; this.buildings._part = null; }
     this.updateBorders();
+    this.airports.update();
     this.updatePreview();
     this.updateSelection();
     this.gl.render(this.scene, this.camera);
