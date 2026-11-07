@@ -10,6 +10,9 @@ import { Terrain } from './terrain.js';
 import { Roads3D } from './roads.js';
 import { Buildings3D } from './buildings.js';
 import { Transit3D } from './transit.js';
+import { ModelLibrary } from './models.js';
+import { buildRivers } from './water.js';
+import { districtLines, borderMesh } from './borders.js';
 
 const FOV = 45;
 
@@ -17,7 +20,7 @@ export class Renderer3D {
   constructor(canvas) {
     this.cv = canvas;
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.gl.shadowMap.enabled = true;
     this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
     this.gl.toneMapping = THREE.ACESFilmicToneMapping;
@@ -63,6 +66,9 @@ export class Renderer3D {
     this.keys = new Set();
     this.lastBuild = 0;
     this.world = null;
+    this.lib = new ModelLibrary();
+    this.lib.load(p => { this.loadProgress = p; const el = document.getElementById('loadbar'); if (el) { el.style.display = p < 1 ? '' : 'none'; el.firstElementChild.style.width = (p * 100).toFixed(0) + '%'; } })
+      .then(() => { this.buildings?.setLibrary(this.lib); this.vehicles?.setLibrary?.(this.lib); });
     this.resize();
     window.addEventListener('keydown', e => { if (!e.target.matches('input,select,textarea')) this.keys.add(e.key); });
     window.addEventListener('keyup', e => this.keys.delete(e.key));
@@ -104,7 +110,12 @@ export class Renderer3D {
     this.roads = new Roads3D(G, this.terrain, this.shared);
     this.buildings = new Buildings3D(G, this.terrain);
     this.transit = new Transit3D(G, this.terrain, this.shared);
-    this.layers = [this.terrain.mesh, this.terrain.ovMesh, ...this.terrain.extras, this.roads.group, this.buildings.group, this.transit.group];
+    if (this.lib.ready) this.buildings.setLibrary(this.lib);
+    this.rivers = buildRivers(this.time);
+    this.borderGroup = new THREE.Group();
+    this.borderLines = districtLines(G);
+    this._borderDist = 0;
+    this.layers = [this.terrain.mesh, this.terrain.ovMesh, ...this.terrain.extras, this.rivers, this.borderGroup, this.roads.group, this.buildings.group, this.transit.group];
     for (const o of this.layers) this.scene.add(o);
     this.netKey = null; this.transitSig = null;
     this.baseDirty = true; this.ovDirty = true;
@@ -266,10 +277,28 @@ export class Renderer3D {
     this.sync(now);
     this.updateCamera();
     if (this.vehicles) { this.vehicles.r3 = this; this.vehicles.update3d(dt, this); }
+    // detailed building models in a ring around the view centre
+    const nearR = this.dist < 4.5 ? Math.min(1.3, Math.max(0.35, this.dist * 1.15)) : -1;
+    if (nearR > 0) this.buildings.repartition(this.tx, this.ty, nearR);
+    else if (this.buildings.lodU.value.z > 0) { this.buildings.lodU.value.z = -1; for (const mm of this.buildings.modelMeshes.values()) mm.count = 0; this.buildings._part = null; }
+    this.updateBorders();
     this.updatePreview();
     this.updateSelection();
     this.gl.render(this.scene, this.camera);
     this.updateLabels();
+  }
+
+  /** District borders as smooth lines; width follows zoom so they stay a couple of pixels wide. */
+  updateBorders() {
+    const show = this.dist > 1.2 || this.overlay === 'districts';
+    this.borderGroup.visible = show;
+    if (!show) return;
+    if (this._borderDist && Math.abs(Math.log(this.dist / this._borderDist)) < 0.35) return;
+    this._borderDist = this.dist;
+    this.clearGroup(this.borderGroup);
+    const w = Math.max(0.004, this.dist * 0.0016), H = (x, y) => this.terrain.heightAt(x, y);
+    this.borderGroup.add(borderMesh(this.borderLines.inner, H, w, 0xf3eefc, 0.55, 0.006));
+    this.borderGroup.add(borderMesh(this.borderLines.outer, H, w * 1.6, 0x6a4fa3, 0.6, 0.006));
   }
 
   // -------------------------------------------------------------- previews
@@ -380,33 +409,9 @@ export class Renderer3D {
         g.add(m);
       }
     } else if (sel.kind === 'district') {
-      const segs = [];
-      const gr = G.grid;
-      for (let k = 0; k < gr.n; k++) {
-        if (gr.district[k] !== sel.id) continue;
-        const i = k % gr.w, j = (k / gr.w) | 0;
-        const nb = [[i - 1, j, [i, j, i, j + 1]], [i + 1, j, [i + 1, j, i + 1, j + 1]], [i, j - 1, [i, j, i + 1, j]], [i, j + 1, [i, j + 1, i + 1, j + 1]]];
-        for (const [a, b, s] of nb) {
-          const o = (a < 0 || b < 0 || a >= gr.w || b >= gr.h) ? -1 : gr.district[b * gr.w + a];
-          if (o !== sel.id) segs.push([[s[0] * CELL, s[1] * CELL], [s[2] * CELL, s[3] * CELL]]);
-        }
-      }
-      const arr = [];
-      for (const [[x0, y0], [x1, y1]] of segs) arr.push(x0, this.hY(x0, y0, 0.01), y0, x1, this.hY(x1, y1, 0.01), y1);
-      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
-      const l = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x1565c0, depthTest: false })); l.renderOrder = 12;
-      g.add(l);
-      // a soft wall around the district for a stronger 3D highlight
-      const pos = [], idx = [];
-      for (const [[x0, y0], [x1, y1]] of segs) {
-        const b = pos.length / 3, h0 = this.hY(x0, y0, 0), h1 = this.hY(x1, y1, 0);
-        pos.push(x0, h0, y0, x1, h1, y1, x0, h0 + 0.06, y0, x1, h1 + 0.06, y1);
-        idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
-      }
-      const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); wg.setIndex(idx);
-      const wall = new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: 0x42a5f5, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
-      wall.renderOrder = 8;
-      g.add(wall);
+      const L = districtLines(G, sel.id), H = (x, y) => this.terrain.heightAt(x, y);
+      const w = Math.max(0.008, this.dist * 0.003);
+      g.add(borderMesh([...L.inner, ...L.outer], H, w, 0x1e88e5, 0.9, 0.012));
     } else if (sel.kind === 'cell') {
       const gr = G.grid, i = sel.id % gr.w, j = (sel.id / gr.w) | 0;
       for (const o of this.boxObj(i * CELL, j * CELL, (i + 1) * CELL, (j + 1) * CELL, new THREE.Color('#1565c0'), 0.12, 0.01)) g.add(o);

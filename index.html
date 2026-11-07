@@ -40,6 +40,7 @@
   <main id="mapwrap">
     <canvas id="map"></canvas>
     <div id="labels3d"></div>
+    <div id="loadbar"><div></div><span>Loading 3D models…</span></div>
     <div id="camhint">🖱 Left-drag pan · Right-drag rotate/tilt · Scroll zoom · ←↑→↓ move · [ ] rotate</div>
     <div id="hint"></div>
     <div id="overlaybar"></div>
@@ -49,6 +50,7 @@
   <aside id="inspector"></aside>
   <div id="modal"><div class="box"></div></div>
 </div>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

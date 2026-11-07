@@ -6,6 +6,7 @@ import { CELL } from '../data/taipei.js';
 import { T_WATER } from '../world.js';
 import { ROAD_TYPES, STYLES, BIKE_LANES, roadWidthM } from '../roads.js';
 import { vcColor } from '../render.js';
+import { isWaterAt } from './water.js';
 
 export const ROAD_LIFT = 0.0007;    // road surface above ground (km)
 export const EXPWY_H = 0.014;       // elevated expressway deck height
@@ -140,10 +141,7 @@ export class Roads3D {
     this.meshes = [];
   }
 
-  isWater(x, y) {
-    const g = this.G.grid, i = Math.floor(x / CELL), j = Math.floor(y / CELL);
-    return i >= 0 && j >= 0 && i < g.w && j < g.h && g.terrain[j * g.w + i] === T_WATER;
-  }
+  isWater(x, y) { return isWaterAt(x, y, 0.004); }
 
   nodeHeight(n) {
     const net = this.G.net;

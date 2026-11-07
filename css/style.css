@@ -190,3 +190,7 @@ ul.newslog small { color: var(--muted); margin-right: 8px; }
 #labels3d .pl.warn { color: #ff8a80; }
 #camhint { position: absolute; right: 10px; bottom: 12px; background: rgba(17,20,27,.7); color: #cfd5e1; font-size: 11px; padding: 3px 10px; border-radius: 12px; pointer-events: none; }
 #map { cursor: grab; }
+
+#loadbar { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: 240px; height: 18px; background: rgba(17,20,27,.8); border-radius: 9px; overflow: hidden; z-index: 4; }
+#loadbar > div { height: 100%; width: 0; background: linear-gradient(90deg, #4f8cff, #7c5cff); transition: width .2s; }
+#loadbar span { position: absolute; inset: 0; text-align: center; font-size: 11px; line-height: 18px; color: #e8ebf2; }

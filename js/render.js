@@ -108,7 +108,7 @@ export class Renderer {
   }
   cellColor(k) {
     const g = G.grid, t = g.terrain[k];
-    if (t === T_WATER) return COL.water;
+    if (t === T_WATER) return this.groundMode ? (hash(k) < 0.5 ? '#9fb57f' : '#9ab17a') : COL.water;
     if (t === T_OUT) return this.groundMode ? (hash(k) < 0.5 ? '#a9b98d' : '#a4b588') : (hash(k) < 0.5 ? '#d3d9cb' : '#d0d7c8');
     const s = g.special[k];
     const z = g.zone[k], l = g.level[k];

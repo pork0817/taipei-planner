@@ -51,7 +51,7 @@ export class Terrain {
     const cellH = new Float32Array(g.n);
     for (let k = 0; k < g.n; k++) {
       const i = k % W, j = (k / W) | 0;
-      if (g.terrain[k] === T_WATER) { cellH[k] = -0.006; continue; }
+      if (g.terrain[k] === T_WATER) { cellH[k] = 0; continue; }
       if (g.terrain[k] !== T_MTN) { cellH[k] = 0; continue; }
       const yang = j * CELL < 12.7;              // Yangmingshan is much higher than the other hills
       const peak = yang ? 0.72 : 0.28, ramp = yang ? 14 : 6;
@@ -72,7 +72,7 @@ export class Terrain {
         s += cellH[k]; n++;
       }
       let h = n ? s / n : 0;
-      if (water && water === n) h = -0.006; else if (water) h = Math.min(h, -0.002);
+      if (water) h = Math.min(h, 0);
       vh[j * VW + i] = h;
     }
     this.vh = vh; this.VW = VW; this.VH = VH;
@@ -163,14 +163,14 @@ export class Terrain {
     outer.receiveShadow = true;
     // keep the outer land below the grid edge and the sea of water only inside the grid
     water.scale.set(W / (W + 40), H / (H + 40), 1);
-    this.extras = [water, outer];
+    this.extras = [outer];
   }
 
   setOverlay(canvas) {
     if (!canvas) { this.ovMesh.visible = false; return; }
     if (!this.ovTex || this.ovTex.image !== canvas) {
       this.ovTex = new THREE.CanvasTexture(canvas);
-      this.ovTex.magFilter = THREE.NearestFilter;
+      this.ovTex.magFilter = THREE.LinearFilter;
       this.ovTex.colorSpace = THREE.SRGBColorSpace;
       this.ovMesh.material.map = this.ovTex;
       this.ovMesh.material.needsUpdate = true;
