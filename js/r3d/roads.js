@@ -155,7 +155,7 @@ export class Roads3D {
     this.meshes = [];
   }
 
-  isWater(x, y) { return isWaterAt(x, y, 0.004); }
+  isWater(x, y) { return isWaterAt(x, y, 0.035); }   // include the riverside strip so roads bridge over it
 
   nodeHeight(n) {
     const net = this.G.net;

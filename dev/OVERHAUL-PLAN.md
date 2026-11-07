@@ -6,8 +6,11 @@ like real roads; airport poorly made; building models bad. Use free online 3D mo
 ## Done so far
 - Steps 1-6 done and pushed: Kenney models with LOD, water-safe lots with road clearance, smooth rivers
   and district borders, realistic roads (medians, curbs, junction polygons), new airport, Kenney cars.
-- LEFT: step 7 (shadow autoUpdate only on change, incremental building regeneration), check car model
-  front direction and model building facing, a few more screenshot checks.
+- Step 7 done: shadows render only on camera/scene change, buildings rebuild only when the grid
+  signature changes (adaptive interval), moving vehicles don't cast shadows.
+- Fixes: rivers were culled (wrong winding) and lost to depth precision when zoomed out; hill edges
+  were pixel-stepped in the ground texture (now shader-only forest); roads bridge over river banks.
+- Car models face +z (checked: cabin sits at -z), matching the vehicle rotation. All steps complete.
 - Downloaded Kenney CC0 kits (commercial, suburban, industrial, cars) into `assets/models/*` (GLB +
   `Textures/colormap.png`, License.txt per kit).
 - Vendored `vendor/jsm/loaders/GLTFLoader.js` + `vendor/jsm/utils/BufferGeometryUtils.js` (three r160),

@@ -123,7 +123,7 @@ export class Renderer {
         const mix = (q, sh) => Math.round(pv[q] * 0.8 + ((zc >> sh) & 255) * 0.2);
         return `rgb(${mix(0, 16)},${mix(1, 8)},${mix(2, 0)})`;
       }
-      if (t === T_MTN) { const h = hash(k); return h < 0.33 ? '#5f8a4c' : h < 0.66 ? '#678f52' : '#58824a'; }
+      // hills use the normal ground colour: the terrain shader darkens forest smoothly by height
       const h = hash(k);
       return h < 0.5 ? '#b9c98f' : '#b2c488';
     }

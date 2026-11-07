@@ -85,7 +85,7 @@ export class Vehicles3D extends Vehicles {
     this.carMeshes = new Map();
     for (const m of cars) {
       const mesh = new THREE.InstancedMesh(m.geo, m.mat, 500);
-      mesh.count = 0; mesh.frustumCulled = false; mesh.castShadow = true;
+      mesh.count = 0; mesh.frustumCulled = false; mesh.castShadow = false;
       this.scene.add(mesh);
       this.carMeshes.set(m.key, { mesh, m, n: 0 });
     }

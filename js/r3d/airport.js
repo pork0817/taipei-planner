@@ -184,7 +184,7 @@ export class Airports3D {
     this.group.add(parked);
     // one aircraft cycling: taxi, take off to the west, land from the east
     const mover = new THREE.Mesh(this.planeGeo, mat);
-    mover.castShadow = true;
+    mover.castShadow = false;
     this.group.add(mover);
     this.flights.push({ mesh: mover, f, ry, ty, gy, rwLen, cx, phase: Math.random() });
   }

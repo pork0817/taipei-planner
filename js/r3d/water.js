@@ -60,7 +60,7 @@ function ribbonGeo(P, half, y) {
 
 export function buildRivers(timeU) {
   const group = new THREE.Group();
-  const water = new THREE.MeshPhongMaterial({ color: 0x2f6a94, shininess: 180, specular: 0x7fa6c4, polygonOffset: true, polygonOffsetFactor: -1 });
+  const water = new THREE.MeshPhongMaterial({ color: 0x2f6a94, shininess: 180, specular: 0x7fa6c4, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
   water.onBeforeCompile = sh => {
     sh.uniforms.uTime = timeU;
     sh.vertexShader = 'varying vec3 vWW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vWW = (modelMatrix * vec4(transformed,1.0)).xyz;');
@@ -74,14 +74,14 @@ export function buildRivers(timeU) {
         float fres = pow(1.0 - max(dot(normalize(vViewPosition), -normal), 0.0), 3.0);
         reflectedLight.indirectDiffuse += vec3(0.5, 0.64, 0.78) * (0.04 + 0.32 * fres);`);
   };
-  const bank = new THREE.MeshLambertMaterial({ color: 0xb9ad8c, polygonOffset: true, polygonOffsetFactor: -0.5 });
-  const grass = new THREE.MeshLambertMaterial({ color: 0x8faa6a, polygonOffset: true, polygonOffsetFactor: -0.3 });
+  const bank = new THREE.MeshLambertMaterial({ color: 0xb9ad8c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+  const grass = new THREE.MeshLambertMaterial({ color: 0x8faa6a, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   for (const r of rivers) {
     const P = smooth(r.P, 3);
     const half = r.width / 2;
-    const levee = new THREE.Mesh(ribbonGeo(P, half + 0.03, 0.0002), grass);       // riverside park strip
-    const sand = new THREE.Mesh(ribbonGeo(P, half + 0.008, 0.0003), bank);
-    const w = new THREE.Mesh(ribbonGeo(P, half, 0.0005), water);
+    const levee = new THREE.Mesh(ribbonGeo(P, half + 0.03, 0.0008), grass);       // riverside park strip
+    const sand = new THREE.Mesh(ribbonGeo(P, half + 0.008, 0.001), bank);
+    const w = new THREE.Mesh(ribbonGeo(P, half, 0.0012), water);
     levee.receiveShadow = sand.receiveShadow = w.receiveShadow = true;
     if (r.width > 0.1) group.add(levee);
     group.add(sand, w);

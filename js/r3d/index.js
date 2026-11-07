@@ -17,6 +17,8 @@ import { districtLines, borderMesh } from './borders.js';
 
 const FOV = 45;
 
+const roadsDirtyFlag = r => false;
+
 export class Renderer3D {
   constructor(canvas) {
     this.cv = canvas;
@@ -24,6 +26,8 @@ export class Renderer3D {
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.gl.shadowMap.enabled = true;
     this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.gl.shadowMap.autoUpdate = false;   // re-render shadows only when something changed
+    this.shadowDirty = true;
     this.gl.toneMapping = THREE.ACESFilmicToneMapping;
     this.gl.toneMappingExposure = 1.0;
     this.scene = new THREE.Scene();
@@ -238,6 +242,16 @@ export class Renderer3D {
     if (k.has('PageDown') || k.has('-')) this.dist = Math.min(45, this.dist * (1 + dt * 1.5));
   }
 
+  /** Cheap hash of everything that changes how buildings look. */
+  gridSignature() {
+    const g = G.grid;
+    let h = 2166136261;
+    for (const arr of [g.zone, g.level, g.special, g.bstyle, g.hcap]) {
+      for (let k = 0; k < arr.length; k += 1) { h ^= arr[k] + k * 31; h = Math.imul(h, 16777619); }
+    }
+    return h >>> 0;
+  }
+
   // -------------------------------------------------------------- layer sync
   sync(now) {
     if (this.world !== G.grid) this.initWorld();
@@ -251,15 +265,25 @@ export class Renderer3D {
       roadsChanged = true;
       this.baseDirty = true;
       this.transitSig = null;
+      this.shadowDirty = true;
     }
     const sig = this.transit.signature();
     if (sig !== this.transitSig) { this.transitSig = sig; this.transit.rebuild(); this.vehicles?.rebuild(); }
-    if (this.baseDirty && (roadsChanged || now - this.lastBuild > 400)) {
+    // rebuild only when the grid really changed; back off when rebuilds are slow or the view is far
+    const interval = Math.max(400, (this.buildMs || 0) * 10, this.dist > 8 ? 1500 : 0);
+    if (this.baseDirty && (roadsChanged || now - this.lastBuild > interval)) {
       this.lastBuild = now;
       this.baseDirty = false;
-      this.r2d.drawBase();
-      this.terrain.tex.needsUpdate = true;
-      this.buildings.rebuild(this.roads.trees);
+      const gsig = this.gridSignature();
+      if (roadsChanged || gsig !== this.gridSig) {
+        this.gridSig = gsig;
+        const t0 = performance.now();
+        this.r2d.drawBase();
+        this.terrain.tex.needsUpdate = true;
+        this.buildings.rebuild(this.roads.trees);
+        this.buildMs = performance.now() - t0;
+        this.shadowDirty = true;
+      }
       const asig = JSON.stringify(this.airports.footprints());
       if (asig !== this.airportSig) { this.airportSig = asig; this.airports.rebuild(); }
       this.ovDirty = true;
@@ -284,10 +308,12 @@ export class Renderer3D {
     if (this.vehicles) { this.vehicles.r3 = this; this.vehicles.update3d(dt, this); }
     // detailed building models in a ring around the view centre
     const nearR = this.dist < 4.5 ? Math.min(1.3, Math.max(0.35, this.dist * 1.15)) : -1;
-    if (nearR > 0) this.buildings.repartition(this.tx, this.ty, nearR);
+    if (nearR > 0 && this.buildings.repartition(this.tx, this.ty, nearR)) this.shadowDirty = true;
     else if (this.buildings.lodU.value.z > 0) { this.buildings.lodU.value.z = -1; for (const mm of this.buildings.modelMeshes.values()) mm.count = 0; this.buildings._part = null; }
     this.updateBorders();
     this.airports.update();
+    const ck = [this.tx, this.ty, this.dist, this.yaw, this.pitch].map(v => v.toFixed(4)).join();
+    if (ck !== this._camKey || this.shadowDirty || roadsDirtyFlag(this)) { this._camKey = ck; this.shadowDirty = false; this.gl.shadowMap.needsUpdate = true; }
     this.updatePreview();
     this.updateSelection();
     this.gl.render(this.scene, this.camera);
