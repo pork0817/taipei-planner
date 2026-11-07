@@ -4,7 +4,9 @@ A 3D browser city-planning game set in Taipei's 12 present-day districts, in the
 with the historical old city, the TRA Western and Tamsui lines and Songshan Airport, and plan the
 city through to 2100.
 
-## Run
+**▶ Play in your browser: https://pork0817.github.io/taipei-planner/**
+
+## Run locally
 
 ```bash
 python3 serve.py 8765
