@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Taipei Planner 1949–2100</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">臺北 <span>Taipei Planner</span></div>
+    <div class="clock">
+      <div id="date">Jan 1949</div>
+      <div id="speed">
+        <button data-speed="0" title="Pause (Space)">⏸</button>
+        <button data-speed="1" title="Normal (1)">▶</button>
+        <button data-speed="2" title="Fast (2)">▶▶</button>
+        <button data-speed="3" title="Faster (3)">▶▶▶</button>
+        <button data-speed="4" title="Fastest (4)">⏩</button>
+      </div>
+    </div>
+    <div class="kpi"><span>Population</span><b id="k-pop">—</b></div>
+    <div class="kpi"><span>GDP / yr</span><b id="k-gdp">—</b></div>
+    <div class="kpi"><span>Treasury</span><b id="k-funds">—</b><small id="k-flow"></small></div>
+    <div class="kpi"><span>Trip time</span><b id="k-commute">—</b></div>
+    <div class="kpi"><span>Congestion</span><b id="k-cong">—</b></div>
+    <div class="kpi wide"><span>Modal share</span><div id="k-modal" class="sharebar"></div></div>
+    <div class="kpi grade-kpi" title="Planner rating"><b id="k-grade">—</b><small id="k-score"></small></div>
+    <div class="menu">
+      <button id="btn-stats" title="Statistics (S)">📊 Stats</button>
+      <button id="btn-help" title="How it works">❔</button>
+      <button id="btn-save" title="Save">💾</button>
+      <button id="btn-load" title="Load">📂</button>
+      <button id="btn-new" title="New game">✦</button>
+    </div>
+  </header>
+  <nav id="toolbar"></nav>
+  <div id="toolopts"></div>
+  <main id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="labels3d"></div>
+    <div id="camhint">🖱 Left-drag pan · Right-drag rotate/tilt · Scroll zoom · ←↑→↓ move · [ ] rotate</div>
+    <div id="hint"></div>
+    <div id="overlaybar"></div>
+    <div id="legend"></div>
+    <div id="toasts"></div>
+  </main>
+  <aside id="inspector"></aside>
+  <div id="modal"><div class="box"></div></div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

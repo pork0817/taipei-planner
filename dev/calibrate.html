@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Taipei Planner · calibration</title>
+<style>
+  body { font: 13px system-ui, sans-serif; margin: 20px; background: #f6f6f4; color: #222; }
+  table { border-collapse: collapse; margin: 8px 0 22px; }
+  th, td { padding: 3px 8px; border-bottom: 1px solid #ddd; text-align: right; font-variant-numeric: tabular-nums; }
+  th { background: #eee; } td:first-child, th:first-child { text-align: left; }
+  button { margin-right: 6px; padding: 6px 12px; }
+</style>
+</head>
+<body>
+<h1>Scenario calibration</h1>
+<p>Runs scripted strategies headlessly (no rendering). Real Taipei reference, 2019 trips: metro about 27%, bus 15%, scooter 23%, car 13%, walk 13%, bike 4%. Congestion is about +30–40% (TomTom).</p>
+<div id="btns"></div>
+<div id="out"></div>
+<script type="module">
+  import { runScenario, STRATEGIES } from './scenarios.js';
+  const MODES = ['walk', 'bike', 'scooter', 'car', 'bus', 'metro', 'lrt', 'rail'];
+  const out = document.getElementById('out');
+  function table(name, rows) {
+    const h = `<h2>${name}</h2><table><tr><th>Year</th><th>Pop K</th><th>GDP/cap K</th>${MODES.map(m => `<th>${m}</th>`).join('')}<th>green</th><th>trip min</th><th>km</th><th>cong %</th><th>metro K</th><th>bus K</th><th>funds</th><th>spent</th><th>score</th></tr>` +
+      rows.map(r => `<tr><td>${r.year}</td><td>${r.pop}</td><td>${r.gdppc}</td>${MODES.map(m => `<td>${r.modal[m]}</td>`).join('')}<td>${r.sus}</td><td>${r.trip}</td><td>${r.km}</td><td>${r.cong}</td><td>${r.metro}</td><td>${r.bus}</td><td>${r.funds}</td><td>${r.spent}</td><td>${r.score} ${r.grade}</td></tr>`).join('') + '</table>';
+    out.insertAdjacentHTML('beforeend', h);
+  }
+  window.runAll = async (to = 2030) => { out.innerHTML = ''; const res = {}; for (const n of Object.keys(STRATEGIES)) { res[n] = await runScenario(n, to); table(n, res[n]); } return res; };
+  document.getElementById('btns').innerHTML = Object.keys(STRATEGIES).map(n => `<button data-n="${n}">${n}</button>`).join('') + '<button id="all">Run all</button>';
+  document.querySelectorAll('[data-n]').forEach(b => b.onclick = async () => table(b.dataset.n, await runScenario(b.dataset.n, 2030)));
+  document.getElementById('all').onclick = () => window.runAll();
+  window.runScenario = runScenario;
+</script>
+</body>
+</html>
